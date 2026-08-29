@@ -1,0 +1,4 @@
+# This folder holds generated experiment outputs (JSON/CSV metric tables).
+# Results are GENERATED, not committed. Do not check real result files into git;
+# regenerate them with:  python experiments/run_experiment.py
+# The .gitkeep file only preserves the empty directory in version control.

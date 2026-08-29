@@ -1,0 +1,252 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{url}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black,
+  pdftitle={How Realistic Are Successful Evasion Attacks?},
+  pdfauthor={Sathyaraj Kolandasamy}
+}
+
+\title{How Realistic Are ``Successful'' Evasion Attacks?\\
+\large A Constraint-Aware Reproducible Comparison of Adversarial Attacks\\
+Against ML-Based Network Intrusion Detection}
+\author{Sathyaraj Kolandasamy\\
+Nova Southeastern University\\
+College of Computing, AI, and Cybersecurity\\
+\texttt{https://github.com/sathya-ksamy-nsu/constraint-aware-nids}}
+\date{Preprint v0.1 \quad 25 August 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Machine-learning-based network intrusion detection systems (NIDS) are widely evaluated under adversarial evasion, and many papers report very high attack success rates (ASR). Surveys from 2023--2024 warn that those successes are often \textbf{unrealistic}: attacks perturb flow features independently, violating protocol semantics and feature interdependencies that a packet-sending adversary cannot break. This preprint contributes a \textbf{constraint-aware evaluation protocol} and an \textbf{open harness} to measure that gap. We formalize a reusable \emph{realistic-perturbation mask} (mutability, direction, range, and interdependency constraints), compare gradient-based (FGSM/PGD), decision-based (HopSkipJump), and generative (GAN) attacks in unconstrained vs.\ constrained regimes, and report ASR together with $L_2$/$L_\infty$ size and a \textbf{valid-sample rate}. The hypothesis, to be tested on CICIDS-2017 or UNSW-NB15, is that enforcing semantically valid, functionality-preserving perturbations \textbf{lowers reported ASR and can reorder attack/defense rankings}. A synthetic end-to-end run of the harness shows the intended mechanism: unconstrained HopSkipJump reached ASR~$=1.00$ with valid-sample rate~$=0.00$, while the constrained regime forced valid-rate~$=1.00$ and collapsed ASR to $0.027$ (undefended MLP). Those figures are \textbf{pipeline validation, not NIDS evidence}. The artifact is the protocol, mask, and one-command matrix---intended as a citable baseline for follow-on work and for a forthcoming workshop version (AI-SEC 2027).
+\end{abstract}
+
+\noindent\textbf{Intended arXiv categories:} \texttt{cs.CR} (primary), \texttt{cs.LG} (cross-list).\\
+\textbf{Code (MIT):} \url{https://github.com/sathya-ksamy-nsu/constraint-aware-nids}
+
+\paragraph{Preprint status.}
+This is a Phase~1 arXiv preprint of an evaluation \emph{protocol and open harness}. Benchmark results on CICIDS-2017 / UNSW-NB15 are \textbf{not yet reported}. Section~\ref{sec:results} includes a pipeline-validation run on \textbf{synthetic data only}; those numbers are \textbf{not} findings about real intrusion detectors.
+
+\section{Introduction}
+
+Modern networks overwhelm signature-based intrusion detection. ML-based NIDS learn statistical regularities of benign and malicious flows and are now common in research and production stacks \cite{he2023aml}. Their decision boundary is therefore a security surface, not only an accuracy metric.
+
+Adversarial examples show that small perturbations can flip a classifier \cite{goodfellow2015explaining,madry2018towards}. Against a NIDS, evasion means malicious traffic is labeled benign. The literature reports many such attacks with high ASR \cite{he2023aml,sharma2024systematic}.
+
+A structural flaw remains: most attacks operate in \textbf{feature space}, treating each CICFlowMeter-style coordinate as independently mutable under a norm budget. A flow vector is a \emph{derived summary} of packets. An attacker who can only send packets cannot independently set inter-arrival statistics, durations, and byte totals to inconsistent values \cite{alhussien2024constraining,ennaji2024adversarial}. Unconstrained ASR can therefore overstate the threat, and defenses can be tuned against impossible traffic.
+
+\paragraph{Research question.}
+When perturbations against an ML-based NIDS are restricted to semantically valid, functionality-preserving changes, how do ASR and the ranking of attacks and defenses change relative to unconstrained feature-space evaluation?
+
+\paragraph{Hypothesis.}
+Constraining perturbations \textbf{lowers reported ASR} and \textbf{reorders} attack/defense rankings versus unconstrained perturbations.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+\item A formal, reusable \textbf{constraint specification} (realistic-perturbation mask).
+\item A \textbf{reproducible harness} (identical preprocessing/splits, ART-based attacks, valid-sample accounting).
+\item A controlled unconstrained-vs-constrained \textbf{experiment design} spanning white-box, black-box, and generative attacks, with and without adversarial training.
+\item A related-work table annotated by whether prior attacks respect domain constraints.
+\item An \textbf{open implementation} with unit tests and a documented synthetic pipeline-validation run.
+\end{enumerate}
+
+\section{Background and threat model}
+
+\subsection{ML-based NIDS pipeline}
+Packets are grouped into flows (five-tuple). Feature extraction (e.g.\ CICFlowMeter) yields counts, durations, flag tallies, and rates. After preprocessing, a classifier outputs benign/malicious. Not every point in feature space is the image of a realizable packet stream.
+
+\subsection{Attack families}
+\textbf{FGSM} \cite{goodfellow2015explaining}: single-step sign of the loss gradient; baseline.
+\textbf{PGD} \cite{madry2018towards}: iterated projected steps; strong first-order white-box attack.
+\textbf{HopSkipJump / Boundary / ZOO:} query-based black-box attacks; applicable to non-differentiable models such as random forests.
+\textbf{GAN-based evasion:} generate evasive vectors whose distribution resembles benign traffic.
+
+\subsection{Knowledge}
+White-box (gradients), grey-box (surrogate/transfer), black-box (queries only). A deployed NIDS is often closest to black-box; white-box remains the worst-case stress test.
+
+\subsection{Feature space vs.\ problem space}
+Feature-space attacks edit the vector. Problem-space attacks edit packets; features change only as a consequence. This protocol is \textbf{constrained feature-space}: a projection/filter approximating problem-space legality without yet crafting packets. Valid-sample rate makes residual unrealizability visible. True packet-level validation is future work.
+
+\subsection{What ``realistic'' means here}
+A perturbation must be \textbf{functionality-preserving}, \textbf{protocol-valid}, and \textbf{interdependency-consistent}. Typical rules: immutable protocol/port/flag-type identifiers; non-negative, often increase-only counts; $\mathrm{total\_packets}=\mathrm{fwd}+\mathrm{bwd}$; rates consistent with counts and duration.
+
+\section{Related work}
+
+He et al.\ \cite{he2023aml} survey adversarial ML for NIDS and flag the realizability mismatch. Ennaji et al.\ \cite{ennaji2024adversarial} catalogue domain constraints and the difficulty of mapping feature-space $\delta$ back to valid traffic. Sharma and Chen \cite{sharma2024systematic} document inconsistent evaluation protocols. Alhussien et al.\ \cite{alhussien2024constraining} show that constraining attacks changes transferability and defense conclusions. This preprint complements that line by releasing a mask and harness and a paired unconstrained/constrained matrix on identical splits.
+
+\begin{table}[t]
+\centering
+\caption{Prior attacks vs.\ domain constraints.}
+\label{tab:related}
+\small
+\begin{tabular}{p{3.4cm}p{2.4cm}p{1.8cm}p{2.6cm}p{2.4cm}}
+\toprule
+Attack & Threat model & Space & Realistic constraints? & Notes \\
+\midrule
+FGSM \cite{goodfellow2015explaining} & White-box & Feature & No (default) & Single-step baseline \\
+PGD \cite{madry2018towards} & White-box & Feature & No (default); mask can be applied & Robustness standard \\
+HopSkipJump / Boundary & Black-box (decision) & Feature & No (default) & Works on RF \\
+ZOO & Black-box (scores) & Feature & No (default) & Query-expensive \\
+GAN-based evasion & Grey/black-box & Often feature & Partial & Distribution-aware \\
+Constrained attacks \cite{alhussien2024constraining} & Mixed & Feature + domain & Yes & Closest prior \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Gap.}
+Unconstrained feature-space ASR dominates published tables. Missing is a shared, released protocol that reports \textbf{valid-sample rate} next to ASR so follow-on papers can cite a common baseline.
+
+\section{Evaluation protocol}
+
+\subsection{Data (intended benchmark)}
+Use \textbf{one} public dataset with identical preprocessing for every cell: CICIDS-2017 \cite{sharafaldin2018cicids} (preferred for constraint provenance) or UNSW-NB15 \cite{moustafa2015unsw}. Raw files are \textbf{not} redistributed. Splits: stratified train/val/test with recorded seed (\texttt{config.yaml}: seed 42; val/test $0.15$ each). Standardization is fit on train only.
+
+\subsection{Models}
+\textbf{MLP} (PyTorch, ART-wrapped) for white-box FGSM/PGD.
+\textbf{Random forest} (scikit-learn) for black-box HopSkipJump/GAN only.
+
+\subsection{Attacks and defense}
+Implemented with the Adversarial Robustness Toolbox (FGSM, PGD, HopSkipJump, optional ZOO) plus a simple GAN attack. Each attack is run unconstrained and constrained (mask projection + validity filter). Defense: PGD adversarial training \cite{madry2018towards}.
+
+\subsection{Constraint mask (central artifact)}
+For $x'=x+\delta$, require:
+\begin{itemize}
+\item \textbf{Mutability:} immutable features have $\delta_i=0$ (protocol, many ports/flags).
+\item \textbf{Direction:} e.g.\ increase-only packet/byte counts.
+\item \textbf{Range:} non-negativity and protocol boxes.
+\item \textbf{Interdependencies:} e.g.\ total packets $=$ forward $+$ backward; ratios repaired after projection.
+\end{itemize}
+The implementation (\texttt{src/constraints.py}) projects then scores valid-sample rate.
+
+\subsection{Metrics and matrix}
+\textbf{ASR}: fraction of originally detected malicious samples that become benign after perturbation.
+Mean $L_2$ / $L_\infty$ of $\delta$.
+\textbf{Valid-sample rate}: fraction of adversarial samples satisfying the mask.
+
+Matrix: $\{\mathrm{FGSM},\mathrm{PGD},\mathrm{HopSkipJump},\mathrm{GAN}\} \times \{\mathrm{unconstrained},\mathrm{constrained}\} \times \{\mathrm{no\ defense},\mathrm{adv.\ training}\} \times \{\mathrm{MLP},\mathrm{RF}\ \mathrm{(black\text{-}box\ only)}\}$.
+
+\section{Experimental setup}
+
+Pipeline-validation run (31 July 2026): Python 3.13.3, PyTorch 2.10.0+cpu, ART 1.20.1, scikit-learn 1.8.0, Windows 10, CPU. Unit tests: 27 passed.
+
+\begin{verbatim}
+pip install -r requirements.txt
+python -m pytest tests/ -v
+python experiments/run_experiment.py --synthetic --model mlp --attack all
+python experiments/run_experiment.py --model mlp --attack all
+\end{verbatim}
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Pipeline validation (synthetic data --- not a NIDS finding)}
+
+Gaussian-blob synthetic features, MLP, full 16-cell matrix (\texttt{RESULTS.md}). Clean test accuracy $\approx 0.993$.
+
+\begin{table}[t]
+\centering
+\caption{Undefended MLP on synthetic data (pipeline validation only).}
+\label{tab:synth}
+\small
+\begin{tabular}{llrrr}
+\toprule
+Attack & Regime & ASR & Valid-rate & Mean $L_2$ \\
+\midrule
+FGSM & unconstrained & 0.000 & 0.327 & 0.346 \\
+FGSM & constrained & 0.000 & 1.000 & 0.480 \\
+PGD & unconstrained & 0.000 & 0.327 & 0.346 \\
+PGD & constrained & 0.000 & 1.000 & 0.480 \\
+HopSkipJump & unconstrained & \textbf{1.000} & \textbf{0.000} & 2.923 \\
+HopSkipJump & constrained & \textbf{0.027} & \textbf{1.000} & 2.325 \\
+GAN & unconstrained & 0.000 & 0.380 & 0.133 \\
+GAN & constrained & 0.000 & 1.000 & 0.325 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Unconstrained HopSkipJump ``succeeds'' on every attacked malicious sample \textbf{and none of those samples are valid under the mask}. Constraining forces valid-rate $=1$ and ASR falls to $0.027$. Gradient attacks did not evade this easy synthetic MLP at the configured $\varepsilon$ (ASR $=0$); that is a limitation of the smoke-test distribution, not evidence that FGSM/PGD are weak on CICIDS. RF black-box cells were not completed in that run.
+
+\subsection{Intended CICIDS-2017 / UNSW-NB15 matrix (pending)}
+All CICIDS/UNSW cells are TBD pending a real-dataset run. Predicted pattern (to confirm or refute): constrained ASR $\ll$ unconstrained ASR; unconstrained valid-rate low; ranking may reorder.
+
+\section{Discussion}
+If the CICIDS/UNSW gap matches the synthetic \emph{mechanism} (high unconstrained ASR, near-zero valid-rate), then many published NIDS ASR figures are not operational threats. Defenders should demand valid-sample rate next to ASR and should measure adversarial training under the same mask the network actually imposes.
+
+\section{Limitations}
+Single-dataset scope once chosen; mask may be incomplete or overly strict; constrained feature-space $\neq$ packet crafting; synthetic Section~\ref{sec:results} does not transfer; attack/defense coverage is three families plus one defense; RF matrix incomplete.
+
+\section{Ethics}
+Evasion research is framed \textbf{defensively}: improve evaluation of detectors. No exploit payloads. Datasets remain with their providers. Do not treat synthetic ASR as evidence against production NIDS.
+
+\section{Conclusion and next versions}
+We release a constraint-aware adversarial-NIDS protocol and harness, and we document a synthetic run that exercises valid-sample accounting. Version 0.2 should replace the pending table with CICIDS-2017 or UNSW-NB15 measurements, then serve as the arXiv record cited by the AI-SEC 2027 workshop submission (target deadline 10 December 2026).
+
+\section*{Reproducibility}
+Code: \url{https://github.com/sathya-ksamy-nsu/constraint-aware-nids}.
+Config/seed: \texttt{config.yaml} (\texttt{seed: 42}).
+Mask: \texttt{src/constraints.py}.
+Pipeline-validation log: \texttt{RESULTS.md}.
+Data download: \texttt{data/README.md} (do not redistribute raw CIC/UNSW files).
+
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+
+\bibitem{he2023aml}
+K.~He, D.~S.~Kim, and M.~R.~Asghar.
+Adversarial machine learning for network intrusion detection systems: A comprehensive survey.
+\emph{IEEE Communications Surveys \& Tutorials}, 25(1):538--566, 2023.
+
+\bibitem{alhussien2024constraining}
+N.~Alhussien, A.~Aleroud, A.~Melhem, and S.~Y.~Khamaiseh.
+Constraining adversarial attacks on network intrusion detection systems: Transferability and defense analysis.
+\emph{IEEE Transactions on Network and Service Management}, 21(3):2751--2772, 2024.
+
+\bibitem{sharma2024systematic}
+S.~Sharma and Z.~Chen.
+A systematic study of adversarial attacks against network intrusion detection systems.
+\emph{Electronics}, 13(24):5030, 2024.
+
+\bibitem{ennaji2024adversarial}
+S.~Ennaji, F.~De~Gaspari, D.~Hitaj, A.~K.~Bidi, and L.~V.~Mancini.
+Adversarial challenges in network intrusion detection systems: Research insights and future prospects.
+arXiv:2409.18736, 2024.
+
+\bibitem{madry2018towards}
+A.~Madry, A.~Makelov, L.~Schmidt, D.~Tsipras, and A.~Vladu.
+Towards deep learning models resistant to adversarial attacks.
+In \emph{ICLR}, 2018.
+
+\bibitem{goodfellow2015explaining}
+I.~J.~Goodfellow, J.~Shlens, and C.~Szegedy.
+Explaining and harnessing adversarial examples.
+In \emph{ICLR}, 2015.
+
+\bibitem{sharafaldin2018cicids}
+I.~Sharafaldin, A.~H.~Lashkari, and A.~A.~Ghorbani.
+Toward generating a new intrusion detection dataset and intrusion traffic characterization.
+In \emph{ICISSP}, 2018.
+
+\bibitem{moustafa2015unsw}
+N.~Moustafa and J.~Slay.
+UNSW-NB15: A comprehensive data set for network intrusion detection systems.
+In \emph{MilCIS}, 2015.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+title: >-
+  How Realistic Are "Successful" Evasion Attacks? A Constraint-Aware
+  Reproducible Comparison of Adversarial Attacks Against ML-Based
+  Network Intrusion Detection
+message: If you use this harness or protocol, please cite this work.
+type: software
+authors:
+  - family-names: Kolandasamy
+    given-names: Sathyaraj
+    affiliation: Nova Southeastern University
+repository-code: "https://github.com/sathya-ksamy-nsu/constraint-aware-nids"
+license: MIT
+version: 0.1.0
+date-released: "2026-08-29"
+keywords:
+  - adversarial machine learning
+  - network intrusion detection
+  - constraint-aware evaluation
+  - reproducibility
+# identifiers:
+#   - type: arxiv
+#     value: "YYMM.NNNNN"   # add after arXiv acceptance

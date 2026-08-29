@@ -1,0 +1,134 @@
+# =============================================================================
+# Configuration for the constraint-aware adversarial-NIDS evaluation harness.
+#
+# This single file is the source of truth for dataset choice, paths, model
+# hyperparameters, attack hyperparameters, constraint toggles, and RNG seeds.
+# Every module reads its settings from here so that experiments are reproducible
+# and identically preprocessed across the whole matrix.
+#
+# NOTE: Nothing here fabricates results. Values are configuration only.
+# =============================================================================
+
+# --- Reproducibility -----------------------------------------------------------
+# A single master seed is fanned out to numpy, torch, and scikit-learn. Keep this
+# fixed across the whole experiment matrix so every configuration sees identical
+# data splits and model initializations.
+seed: 42
+
+# --- Dataset -------------------------------------------------------------------
+dataset:
+  # Choose exactly one: "cicids2017" or "unsw-nb15".
+  # Dataset selection is an open decision carried from the paper (Section 4.1).
+  name: "cicids2017"
+
+  # Directory holding the raw dataset files. Raw data is NOT committed to the
+  # repo (see data/README.md for how to obtain it). Paths are relative to the
+  # project root unless absolute.
+  raw_dir: "data/raw/cicids2017"
+
+  # Optional glob for the CSV file(s) inside raw_dir. data_loader concatenates
+  # all matching files. Adjust to your local layout.
+  file_glob: "*.csv"
+
+  # Name of the label column in the raw CSVs. TODO: confirm exact column name
+  # for your dataset export (CICIDS-2017 commonly uses "Label"; UNSW-NB15 uses
+  # "label"/"attack_cat"). data_loader normalizes header whitespace/casing.
+  label_column: "Label"
+
+  # String(s) in the label column that denote benign traffic. Everything else is
+  # treated as malicious (binary evasion setting: malicious -> benign).
+  benign_labels: ["BENIGN", "Benign", "normal", "Normal", "0"]
+
+  # Fraction of samples routed to validation and test (the remainder is train).
+  val_size: 0.15
+  test_size: 0.15
+
+  # Optional cap on rows loaded (for quick local smoke runs). null = load all.
+  max_rows: null
+
+# --- Preprocessing -------------------------------------------------------------
+preprocessing:
+  # Drop columns that leak identity / are not learnable features. These are
+  # matched case-insensitively against normalized headers. TODO: adjust for your
+  # dataset export.
+  drop_columns:
+    - "Flow ID"
+    - "Source IP"
+    - "Src IP"
+    - "Destination IP"
+    - "Dst IP"
+    - "Timestamp"
+  # Standardize features with a scaler fit ONLY on the training split.
+  scaler: "standard"      # one of: "standard", "minmax", "none"
+  # Replace +/-inf with NaN then impute NaN with this strategy on train stats.
+  impute: "median"        # one of: "median", "mean", "zero"
+
+# --- Models --------------------------------------------------------------------
+models:
+  mlp:
+    hidden_dims: [128, 64]
+    dropout: 0.2
+    lr: 0.001
+    weight_decay: 0.0001
+    epochs: 20
+    batch_size: 256
+  random_forest:
+    n_estimators: 200
+    max_depth: null        # null = grow until pure / min_samples
+    n_jobs: 1              # single-threaded: black-box attacks issue many tiny
+                           # single-sample queries where joblib parallelism only
+                           # adds overhead (set >1 only for large batch predicts)
+
+# --- Attacks -------------------------------------------------------------------
+# Hyperparameters passed to the ART attack wrappers. Perturbation budgets are
+# expressed in the standardized feature space.
+attacks:
+  # Which attacks to include when --attack all is requested.
+  enabled: ["fgsm", "pgd", "hopskipjump", "gan"]
+  fgsm:
+    eps: 0.1
+  pgd:
+    eps: 0.1
+    eps_step: 0.01
+    max_iter: 40
+  hopskipjump:
+    max_iter: 20
+    max_eval: 1000
+    init_eval: 100
+  # Simple GAN-based attack: a generator learns to produce small additive
+  # perturbations that push malicious samples toward the benign class.
+  gan:
+    latent_dim: 16
+    generator_hidden: [64, 64]
+    epochs: 30
+    batch_size: 128
+    lr: 0.0002
+    # Cap on the L-inf size of the generated perturbation (feature space).
+    eps: 0.1
+
+# --- Constraint mask -----------------------------------------------------------
+# Toggle the realistic-perturbation mask on/off and choose enforcement mode.
+# The concrete per-feature spec lives in src/constraints.py and is dataset
+# specific (marked TODO there).
+constraints:
+  enabled: true
+  # "project": clip/project each perturbed sample back onto the feasible set
+  #            inside the attack loop (recommended).
+  # "filter":  only measure the valid-sample rate, do not modify perturbations.
+  mode: "project"
+
+# --- Defense -------------------------------------------------------------------
+defense:
+  adversarial_training:
+    enabled: true
+    # Attack used to generate adversarial examples during training.
+    attack: "pgd"
+    # Fraction of each batch replaced by adversarial examples.
+    ratio: 0.5
+    epochs: 20
+
+# --- Output --------------------------------------------------------------------
+output:
+  results_dir: "results"
+  # Write both a machine-readable JSON and a flat CSV per run.
+  formats: ["json", "csv"]
