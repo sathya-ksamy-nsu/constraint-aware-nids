@@ -1,32 +1,15 @@
 # Constraint-Aware Adversarial NIDS
 
-Open evaluation **protocol and harness** for the preprint:
+MIT-licensed **evaluation harness** for constraint-aware adversarial attacks on ML-based network intrusion detection.
 
-**How Realistic Are “Successful” Evasion Attacks? A Constraint-Aware Reproducible Comparison of Adversarial Attacks Against ML-Based Network Intrusion Detection**
+It compares gradient (FGSM/PGD), decision-based (HopSkipJump), and GAN attacks in **unconstrained** vs **constrained** regimes, and reports attack success rate, perturbation size, and **valid-sample rate**.
+
+Manuscripts, proposals, and arXiv sources live in a separate private repository. This repo is **code, config, and tests only**.
 
 **Author:** Sathyaraj Kolandasamy  
-**Affiliation:** Nova Southeastern University, College of Computing, AI, and Cybersecurity  
-**License:** MIT
+**Affiliation:** Nova Southeastern University
 
-Hypothesis: constraining adversarial perturbations to semantically valid, functionality-preserving flow features **lowers reported attack success rate (ASR)** and can **reorder** attack/defense rankings versus unconstrained feature-space evaluation.
-
-> Synthetic pipeline-validation numbers in `RESULTS.md` are **not** findings about real NIDS. CICIDS-2017 / UNSW-NB15 results are forthcoming. Raw datasets are **not** included.
-
-## Repository contents
-
-| Path | What it is |
-| --- | --- |
-| [`arxiv-preprint.md`](arxiv-preprint.md) | Preprint manuscript (Markdown) |
-| [`latex/main.tex`](latex/main.tex) | **arXiv upload:** LaTeX source (compile to PDF) |
-| [`ARXIV.md`](ARXIV.md) | How to submit to arXiv |
-| [`src/`](src/) | Constraint mask, models, ART attacks, metrics |
-| [`experiments/run_experiment.py`](experiments/run_experiment.py) | One-command experiment matrix |
-| [`tests/`](tests/) | NumPy-only unit tests (no datasets required) |
-| [`data/README.md`](data/README.md) | How to obtain CICIDS-2017 / UNSW-NB15 |
-| [`RESULTS.md`](RESULTS.md) | Synthetic harness validation log |
-| [`CITATION.cff`](CITATION.cff) | Cite this repository |
-
-## Quick start
+## Setup
 
 ```powershell
 python -m venv .venv
@@ -36,12 +19,22 @@ python -m pytest tests/ -v
 python experiments/run_experiment.py --synthetic --model mlp --attack all
 ```
 
-After placing CICIDS/UNSW CSVs under `data/raw/` (see `data/README.md`):
+Raw CICIDS-2017 / UNSW-NB15 files are **not** included. See [`data/README.md`](data/README.md), then:
 
 ```powershell
 python experiments/run_experiment.py --model mlp --attack all
 ```
 
-## Cite
+## Layout
 
-See [`CITATION.cff`](CITATION.cff). After the arXiv id is assigned, add it there and in `latex/main.tex`.
+| Path | Contents |
+| --- | --- |
+| `src/` | Constraint mask, models, attacks, metrics |
+| `experiments/` | CLI for the experiment matrix |
+| `tests/` | Unit tests (no dataset required) |
+| `config.yaml` | Seeds, models, attack settings |
+| `data/README.md` | How to obtain public datasets |
+
+## License
+
+MIT. Do not relicense third-party datasets.
