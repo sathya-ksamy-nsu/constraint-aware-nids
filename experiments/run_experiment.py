@@ -82,6 +82,11 @@ def parse_args(argv=None):
         action="store_true",
         help="Use fabricated synthetic data (pipeline smoke test; NOT results).",
     )
+    p.add_argument(
+        "--output-dir",
+        default=None,
+        help="Override results directory. Synthetic runs default to results/smoke/.",
+    )
     p.add_argument("--seed", type=int, default=None, help="Override the RNG seed.")
     return p.parse_args(argv)
 
@@ -97,8 +102,15 @@ def main(argv=None) -> int:
 
     from src import evaluate as E
     from src.models import set_global_seeds
+    from src.run_meta import write_run_meta
 
     set_global_seeds(int(cfg.get("seed", 42)))
+
+    cfg.setdefault("output", {})
+    if args.output_dir:
+        cfg["output"]["results_dir"] = args.output_dir
+    elif args.synthetic:
+        cfg["output"]["results_dir"] = os.path.join("results", "smoke")
 
     # --- load data ---
     if args.synthetic:
@@ -143,6 +155,14 @@ def main(argv=None) -> int:
     elif args.unconstrained:
         records = [r for r in records if not r["constrained"]]
 
+    data_mode = "synthetic" if args.synthetic else "real"
+    record_label = (
+        "SYNTHETIC / PIPELINE VALIDATION" if args.synthetic else "ok"
+    )
+    for r in records:
+        r["data_mode"] = data_mode
+        r["label"] = record_label
+
     # --- report + persist ---
     print(f"\n[info] Completed {len(records)} matrix cell(s):")
     for r in records:
@@ -153,9 +173,42 @@ def main(argv=None) -> int:
             f"L2={r.get('l2_mean', float('nan')):.3f}"
         )
 
-    written = E.write_results(records, cfg, tag=f"{args.model}_{args.attack}")
+    tag = f"{args.model}_{args.attack}"
+    if args.synthetic:
+        tag = f"SYNTHETIC_{tag}"
+    written = E.write_results(records, cfg, tag=tag)
     for fmt, path in written.items():
         print(f"[info] wrote {fmt}: {path}")
+
+    meta_label = (
+        "SYNTHETIC / PIPELINE VALIDATION" if args.synthetic else "environment"
+    )
+    meta_path = os.path.join("results", "run_meta.json")
+    write_run_meta(
+        meta_path,
+        label=meta_label,
+        extra={
+            "synthetic": bool(args.synthetic),
+            "model": args.model,
+            "attack": args.attack,
+            "results_dir": cfg.get("output", {}).get("results_dir"),
+            "written": written,
+        },
+    )
+    print(f"[info] wrote run metadata: {meta_path}")
+    if args.synthetic:
+        smoke_meta = os.path.join(cfg["output"]["results_dir"], "run_meta.json")
+        write_run_meta(
+            smoke_meta,
+            label=meta_label,
+            extra={
+                "synthetic": True,
+                "model": args.model,
+                "attack": args.attack,
+                "written": written,
+            },
+        )
+        print(f"[info] wrote smoke run metadata: {smoke_meta}")
 
     return 0
 

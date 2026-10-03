@@ -56,7 +56,7 @@ def evaluate_cell(
 
     t0 = time.time()
     result = A.run_attack(
-        attack_name, model, data.x_test, data.y_test, cell_cfg, mask=mask
+        attack_name, model, data.x_test, data.y_test, cell_cfg, mask=mask, scaler=data.scaler
     )
     elapsed = time.time() - t0
 
@@ -78,7 +78,14 @@ def evaluate_cell(
         "constrained": constrained,
         "defense": defense_label,
         "clean_accuracy_full_test": M.clean_accuracy(data.y_test, y_pred_clean_test),
+        "clean_f1_malicious_test": M.f1_malicious(data.y_test, y_pred_clean_test),
         "runtime_sec": round(elapsed, 3),
+        "n_attacked": int(len(result.y_true)),
+        "mask_hash": mask.spec.fingerprint(),
+        "status": "ok",
+        "corpus": (cfg.get("freeze") or {}).get("scope", "unspecified"),
+        "n_train": int(len(data.y_train)),
+        "n_test": int(len(data.y_test)),
     }
     record.update(summary)
     return record
@@ -118,8 +125,24 @@ def run_matrix(
     if include_defense and adv_cfg.get("enabled", False) and model_name == "mlp":
         defended = build_model(model_name, data.n_features, cfg)
         defended.fit(data.x_train, data.y_train)
+        x_at, y_at = data.x_train, data.y_train
+        max_at = adv_cfg.get("max_train_samples")
+        if max_at is not None and len(y_at) > int(max_at):
+            from sklearn.model_selection import train_test_split
+
+            idx, _ = train_test_split(
+                np.arange(len(y_at)),
+                train_size=int(max_at),
+                random_state=int(cfg.get("seed", 42)),
+                stratify=y_at,
+            )
+            x_at, y_at = data.x_train[idx], data.y_train[idx]
+            print(
+                f"[defense] adv-training loop on stratified {len(y_at)} / "
+                f"{len(data.y_train)} train rows"
+            )
         defended = adversarial_train_mlp(
-            defended, data.x_train, data.y_train, cfg, mask=mask
+            defended, x_at, y_at, cfg, mask=mask
         )
         for attack in attack_names:
             for constrained in (False, True):

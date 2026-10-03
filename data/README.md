@@ -76,8 +76,7 @@ dataset:
 
 The constraint mask (`src/constraints.py`, paper Section 4.4) encodes these
 domain assumptions. **These are defaults that MUST be reviewed against the exact
-column names of whichever dataset export you download** — search for `TODO` in
-`src/constraints.py`.
+column names of whichever dataset export you download.**
 
 - **Immutable / not attacker-controllable** (perturbation forced to zero):
   - protocol identifier (`Protocol` / `proto`),
@@ -98,12 +97,11 @@ column names of whichever dataset export you download** — search for `TODO` in
 - **Integer features:** packet/flag counts are rounded to integers after
   projection.
 
-### TODOs the student must complete
-- [ ] Confirm the exact `label_column` and `benign_labels` for your export.
-- [ ] Replace the keyword heuristics in `build_default_spec()` with an explicit
-      per-column table (exact immutable columns and exact `[lo, hi]` ranges) for
-      the chosen dataset.
-- [ ] Add the concrete interdependency relations using the dataset's real column
-      names (the generic `sum_relation` / `ratio_relation` / `upper_bound_relation`
-      helpers are ready to wire up).
-- [ ] Record dataset citations in `paper.md` References.
+### Reviewer / reproducer checklist
+- Confirm the exact `label_column` and `benign_labels` for your export.
+- If adapting beyond the shipped CICIDS-2017 mask, replace keyword heuristics in
+  `build_default_spec()` with an explicit per-column table (immutable columns and
+  `[lo, hi]` ranges) for the chosen dataset.
+- Wire interdependency relations to the dataset's real column names using the
+  generic `sum_relation` / `ratio_relation` / `upper_bound_relation` helpers.
+- Cite the dataset papers in any manuscript that uses these materials.

@@ -1,15 +1,20 @@
-# Reproducible validation artifacts for the constraint-aware adversarial-NIDS study.
-# Versions are pinned-ish (compatible-release, >=) to balance reproducibility with
-# the student's local Python/CUDA setup. Pin exact ==versions in a lockfile before
-# submission (see README reproducibility checklist).
+# Direct dependencies pinned from a clean Python 3.12.3 venv (2026-09-14).
+# Recreate: python -m venv .venv && pip install -r requirements.txt
+# (Windows: .venv\Scripts\python.exe -m pip install -r requirements.txt)
+#
+# numpy==1.26.4 provides cp312 wheels. On Python 3.13 recreate the venv with
+# 3.12, or re-pin numpy after a successful install and update run_meta.json.
+#
+# torch==2.14.0 is the CPU wheel used here. On a machine without CUDA:
+#   pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+# For CUDA, install the matching torch wheel from https://pytorch.org then
+# re-run scripts/write_run_meta.py so results/run_meta.json matches.
 
-numpy>=1.24,<2.0
-pandas>=2.0,<3.0
-scikit-learn>=1.3,<2.0
-torch>=2.0,<3.0
-adversarial-robustness-toolbox>=1.17,<2.0
-matplotlib>=3.7,<4.0
-pyyaml>=6.0,<7.0
-
-# Testing (constraint/metrics unit tests only need numpy + pytest).
-pytest>=7.4,<9.0
+numpy==1.26.4
+pandas==2.3.3
+scikit-learn==1.9.1
+torch==2.14.0
+adversarial-robustness-toolbox==1.20.1
+matplotlib==3.11.2
+pyyaml==6.0.3
+pytest==8.4.2

@@ -192,6 +192,8 @@ class RandomForestModel:
 
     def fit(self, x: np.ndarray, y: np.ndarray) -> "RandomForestModel":
         self.clf.fit(np.asarray(x), np.asarray(y))
+        # Black-box attacks issue many single-row queries; joblib overhead hurts.
+        self.clf.n_jobs = 1
         self._art = None
         return self
 

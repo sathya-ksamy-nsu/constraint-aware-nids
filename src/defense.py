@@ -5,8 +5,8 @@ mixture of clean and PGD-generated adversarial examples, then hand the hardened
 model back so the full attack matrix can be re-run against it.
 
 Only the differentiable MLP target is adversarially trained here (the random
-forest is defended via transfer in practice; that extension is left as a TODO).
-PyTorch and ART are imported lazily.
+forest is defended via transfer in practice; RF adversarial training is out of
+scope for this release). PyTorch and ART are imported lazily.
 """
 from __future__ import annotations
 

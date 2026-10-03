@@ -1,20 +1,31 @@
 cff-version: 1.2.0
-title: Constraint-aware adversarial NIDS evaluation harness
-message: If you use this software, please cite this repository.
+title: >-
+  How Realistic are "Successful" Evasion Attacks? A Constraint-Aware
+  Comparison Against ML-Based Network Intrusion Detection
+message: >-
+  Anonymous submission for peer review. Author-identifying citation metadata
+  will be restored after acceptance.
 type: software
 authors:
-  - family-names: Kolandasamy
-    given-names: Sathyaraj
-    affiliation: Nova Southeastern University
-repository-code: "https://github.com/sathya-ksamy-nsu/constraint-aware-nids"
+  - name: Anonymous Author(s)
+preferred-citation:
+  type: conference-paper
+  authors:
+    - name: Anonymous Author(s)
+  title: >-
+    How Realistic are "Successful" Evasion Attacks? A Constraint-Aware
+    Comparison Against ML-Based Network Intrusion Detection
+  conference:
+    name: 2026 IEEE MetroCon
+  year: 2026
+# repository-code omitted for double-blind review
 license: MIT
-version: 0.1.0
-date-released: "2026-08-29"
+version: 0.2.0
+date-released: "2026-10-01"
 keywords:
   - adversarial machine learning
   - network intrusion detection
   - constraint-aware evaluation
+  - cybersecurity
+  - AI security
   - reproducibility
-# identifiers:
-#   - type: arxiv
-#     value: "YYMM.NNNNN"   # add after arXiv acceptance
