@@ -104,3 +104,9 @@ def test_summarize_keys_and_values():
     assert np.isclose(out["l2_mean"], 2.5)
     assert "valid_sample_rate" in out
     assert np.isclose(out["clean_accuracy"], 1.0)
+
+
+def test_f1_malicious_perfect_and_none():
+    y = np.array([1, 1, 0, 0])
+    assert np.isclose(M.f1_malicious(y, y), 1.0)
+    assert np.isclose(M.f1_malicious(y, np.zeros_like(y)), 0.0)

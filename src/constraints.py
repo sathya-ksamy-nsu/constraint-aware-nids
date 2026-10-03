@@ -21,16 +21,17 @@ Two operations are provided:
 
 IMPORTANT (assumptions & scope)
 -------------------------------
-The generic engine below is dataset-agnostic. The *concrete* per-feature entries
-(which exact CICIDS-2017 / UNSW-NB15 columns are immutable, their ranges, and
-their interdependency formulas) depend on the chosen dataset's exact column
-names and are marked TODO in :func:`build_default_spec`. The relationships
-encoded there (non-negativity of counts/durations, total = fwd + bwd, immutable
-protocol/port/flag-type identifiers, one-directional add-only manipulation) are
-the domain assumptions justified in the paper and in ``data/README.md``.
+The generic engine below is dataset-agnostic. CICIDS-2017 uses the explicit
+per-column table in :mod:`src.cicids_mask` (wired through :func:`build_default_spec`
+when ``dataset="cicids2017"``). Other dataset names fall back to a heuristic
+spec. The relationships encoded there (non-negativity of counts/durations,
+total = fwd + bwd, immutable identifiers, one-directional add-only manipulation)
+are the domain assumptions justified in the paper and in ``data/README.md``.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -113,6 +114,35 @@ class ConstraintSpec:
     def integer_mask(self) -> np.ndarray:
         return np.array([f.integer for f in self.features], dtype=bool)
 
+    def fingerprint(self) -> str:
+        """Stable SHA-256 of the per-feature table (mask version hash)."""
+        payload = []
+        for f in self.features:
+            payload.append(
+                {
+                    "name": f.name,
+                    "mutable": f.mutable,
+                    "direction": int(f.direction),
+                    "lo": _bound_token(f.lo),
+                    "hi": _bound_token(f.hi),
+                    "integer": f.integer,
+                }
+            )
+        blob = json.dumps(
+            {"features": payload, "n_interdeps": len(self.interdependencies), "tol": self.tol},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _bound_token(value: float) -> str:
+    if np.isneginf(value):
+        return "-inf"
+    if np.isposinf(value):
+        return "+inf"
+    return repr(float(value))
+
 
 class ConstraintMask:
     """Enforces and checks a :class:`ConstraintSpec`.
@@ -153,32 +183,36 @@ class ConstraintMask:
 
         x = x_adv.copy()
 
-        # 1. immutable features locked to clean values
+        for _ in range(2):
+            # 1. immutable features locked to clean values
+            x[:, ~self._mutable] = x_clean[:, ~self._mutable]
+
+            # 2. direction constraints on the delta
+            delta = x - x_clean
+            inc_only = self._dir == INCREASE_ONLY
+            dec_only = self._dir == DECREASE_ONLY
+            if inc_only.any():
+                delta[:, inc_only] = np.clip(delta[:, inc_only], 0.0, None)
+            if dec_only.any():
+                delta[:, dec_only] = np.clip(delta[:, dec_only], None, 0.0)
+            x = x_clean + delta
+
+            # 3. box bounds
+            x = self._clip_box(x)
+
+            # 4. integer rounding
+            if self._int.any():
+                x[:, self._int] = np.rint(x[:, self._int])
+
+            # 5. interdependency repairs
+            for repair in self.spec.interdependencies:
+                x = repair(x, self.spec.index)
+
+            # 6. re-clip after repairs
+            x = self._clip_box(x)
+
+        # Final lock so repairs cannot move immutable coordinates.
         x[:, ~self._mutable] = x_clean[:, ~self._mutable]
-
-        # 2. direction constraints on the delta
-        delta = x - x_clean
-        inc_only = self._dir == INCREASE_ONLY
-        dec_only = self._dir == DECREASE_ONLY
-        if inc_only.any():
-            delta[:, inc_only] = np.clip(delta[:, inc_only], 0.0, None)
-        if dec_only.any():
-            delta[:, dec_only] = np.clip(delta[:, dec_only], None, 0.0)
-        x = x_clean + delta
-
-        # 3. box bounds
-        x = self._clip_box(x)
-
-        # 4. integer rounding
-        if self._int.any():
-            x[:, self._int] = np.rint(x[:, self._int])
-
-        # 5. interdependency repairs
-        for repair in self.spec.interdependencies:
-            x = repair(x, self.spec.index)
-
-        # 6. re-clip after repairs
-        x = self._clip_box(x)
         return x
 
     def _clip_box(self, x: np.ndarray) -> np.ndarray:
@@ -340,13 +374,14 @@ def build_default_spec(
           like it can be negative (e.g., contains "min"/"mean" of a signed
           quantity), in which case bounds are widened to (-inf, inf).
 
-    TODO (dataset-specific, per Section 4.4):
-        * Replace the keyword heuristics with an explicit per-column table for
-          the chosen dataset (exact immutable columns, exact [lo, hi] ranges).
-        * Add the concrete interdependency relations that hold for the dataset's
-          real column names (the examples below are wired only if the matching
-          columns are present).
+    For ``dataset='cicids2017'`` each known CICFlowMeter column is assigned from
+    the explicit table in :mod:`src.cicids_mask` (immutable port/flags/victim
+    counters, increase-only attacker-controlled counts, repaired rates). Unknown
+    names still use the keyword heuristics below.
     """
+    ds = (dataset or "").lower().replace("-", "")
+    use_cicids = ds in {"cicids2017", "cicids"}
+
     immutable_keywords = list(
         immutable_keywords
         if immutable_keywords is not None
@@ -366,7 +401,17 @@ def build_default_spec(
     )
 
     specs: List[FeatureSpec] = []
+    cicids_explicit = 0
+    if use_cicids:
+        from .cicids_mask import cicids2017_feature_spec
+
     for name in feature_names:
+        if use_cicids:
+            explicit = cicids2017_feature_spec(name)
+            if explicit is not None:
+                specs.append(explicit)
+                cicids_explicit += 1
+                continue
         lname = name.lower()
         is_immutable = any(k in lname for k in immutable_keywords)
         if is_immutable:
@@ -392,8 +437,11 @@ def build_default_spec(
         )
 
     interdeps: List[Interdependency] = []
-    # Wire example relations only if plausible columns exist. These names are
-    # illustrative; TODO: replace with the dataset's exact column names.
+    if use_cicids:
+        from .cicids_mask import cicids2017_interdependencies
+
+        interdeps.extend(cicids2017_interdependencies(feature_names))
+
     lut = {n.lower(): n for n in feature_names}
 
     def find(*cands: str) -> Optional[str]:

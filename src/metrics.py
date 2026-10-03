@@ -42,6 +42,22 @@ def clean_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean(y_true == y_pred))
 
 
+def f1_malicious(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Binary F1 for the malicious class (label == 1)."""
+    y_true = _as_1d_int(y_true)
+    y_pred = _as_1d_int(y_pred)
+    tp = int(np.sum((y_true == MALICIOUS) & (y_pred == MALICIOUS)))
+    fp = int(np.sum((y_true == BENIGN) & (y_pred == MALICIOUS)))
+    fn = int(np.sum((y_true == MALICIOUS) & (y_pred == BENIGN)))
+    if tp + fp == 0 or tp + fn == 0:
+        return 0.0
+    prec = tp / (tp + fp)
+    rec = tp / (tp + fn)
+    if prec + rec == 0:
+        return 0.0
+    return float(2.0 * prec * rec / (prec + rec))
+
+
 def attack_success_rate(
     y_true: np.ndarray,
     y_pred_adv: np.ndarray,

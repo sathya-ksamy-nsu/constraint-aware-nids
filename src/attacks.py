@@ -42,11 +42,21 @@ class AttackResult:
     validity_flags: Optional[np.ndarray] = None  # per-sample constraint validity
 
 
-def _select_malicious(x: np.ndarray, y: np.ndarray):
+def _select_malicious(x: np.ndarray, y: np.ndarray, cfg: Optional[dict] = None, attack_name: str = ""):
     """Return the malicious subset (label==1) that attacks target for evasion."""
     y = np.asarray(y).astype(int)
-    mask = y == C.MALICIOUS if hasattr(C, "MALICIOUS") else y == 1
-    return x[mask], y[mask], mask
+    mask = y == 1
+    x_mal, y_mal = x[mask], y[mask]
+    cap = None
+    if cfg:
+        attacks_cfg = cfg.get("attacks", {})
+        per_attack = attacks_cfg.get(attack_name.lower(), {}) if attack_name else {}
+        cap = per_attack.get("max_samples", attacks_cfg.get("max_samples"))
+    if cap is not None and x_mal.shape[0] > int(cap):
+        rng = np.random.default_rng(int((cfg or {}).get("seed", 42)))
+        idx = np.sort(rng.choice(x_mal.shape[0], size=int(cap), replace=False))
+        x_mal, y_mal = x_mal[idx], y_mal[idx]
+    return x_mal, y_mal, mask
 
 
 # --------------------------------------------------------------------------- #
@@ -105,13 +115,13 @@ def run_art_attack(
     mask: Optional[C.ConstraintMask] = None,
 ) -> AttackResult:
     """Run an ART-backed attack (fgsm/pgd/hopskipjump/zoo) on malicious samples."""
-    x_mal, y_mal, _ = _select_malicious(x, y)
+    x_mal, y_mal, _ = _select_malicious(x, y, cfg=cfg, attack_name=name)
     art_clf = model.to_art_classifier()
     attack = _build_art_attack(name, art_clf, cfg)
     x_adv = attack.generate(x=x_mal.astype(np.float32))
     x_adv = np.asarray(x_adv, dtype=float)
 
-    return _finalize(x_mal, x_adv, y_mal, cfg, mask)
+    return _finalize(x_mal, x_adv, y_mal, cfg, mask, scaler=getattr(model, "scaler", None))
 
 
 # --------------------------------------------------------------------------- #
@@ -141,7 +151,7 @@ def run_gan_attack(
     import torch
     import torch.nn as nn
 
-    x_mal, y_mal, _ = _select_malicious(x, y)
+    x_mal, y_mal, _ = _select_malicious(x, y, cfg=cfg, attack_name="gan")
     a = cfg.get("attacks", {}).get("gan", {})
     seed = int(cfg.get("seed", 42))
     torch.manual_seed(seed)
@@ -194,7 +204,7 @@ def run_gan_attack(
         delta = eps * gen(torch.cat([x_t, z], dim=1))
         x_adv = (x_t + delta).cpu().numpy().astype(float)
 
-    return _finalize(x_mal, x_adv, y_mal, cfg, mask)
+    return _finalize(x_mal, x_adv, y_mal, cfg, mask, scaler=getattr(model, "scaler", None))
 
 
 def _get_differentiable_critic(model, x, y, cfg, device):
@@ -228,21 +238,36 @@ def _get_differentiable_critic(model, x, y, cfg, device):
 # --------------------------------------------------------------------------- #
 # Shared finalization: constraint projection + validity flags.
 # --------------------------------------------------------------------------- #
+def _to_native_space(x: np.ndarray, scaler) -> np.ndarray:
+    if scaler is None:
+        return np.asarray(x, dtype=float)
+    return np.asarray(scaler.inverse_transform(x), dtype=float)
+
+
+def _from_native_space(x: np.ndarray, scaler) -> np.ndarray:
+    if scaler is None:
+        return np.asarray(x, dtype=float)
+    return np.asarray(scaler.transform(x), dtype=float)
+
+
 def _finalize(
     x_clean: np.ndarray,
     x_adv: np.ndarray,
     y_true: np.ndarray,
     cfg: dict,
     mask: Optional[C.ConstraintMask],
+    scaler=None,
 ) -> AttackResult:
     constrained = bool(cfg.get("constraints", {}).get("enabled", False)) and mask is not None
     validity = None
     if mask is not None:
+        x_clean_nat = _to_native_space(x_clean, scaler)
+        x_adv_nat = _to_native_space(x_adv, scaler)
         mode = cfg.get("constraints", {}).get("mode", "project")
         if constrained and mode == "project":
-            x_adv = mask.project(x_adv, x_clean)
-        # Always record validity of whatever we ended up with.
-        validity = mask.is_valid(x_adv, x_clean)
+            x_adv_nat = mask.project(x_adv_nat, x_clean_nat)
+            x_adv = _from_native_space(x_adv_nat, scaler)
+        validity = mask.is_valid(x_adv_nat, x_clean_nat)
     return AttackResult(
         x_clean=x_clean, x_adv=x_adv, y_true=y_true, validity_flags=validity
     )
@@ -255,8 +280,11 @@ def run_attack(
     y: np.ndarray,
     cfg: dict,
     mask: Optional[C.ConstraintMask] = None,
+    scaler=None,
 ) -> AttackResult:
     """Dispatch to the appropriate attack implementation by name."""
+    if scaler is not None:
+        model.scaler = scaler
     name = name.lower()
     if name == "gan":
         return run_gan_attack(model, x, y, cfg, mask)

@@ -1,40 +1,48 @@
-# Constraint-Aware Adversarial NIDS
+# MetroCon 2026 — anonymous reproduction artifacts (Topic 1)
 
-MIT-licensed **evaluation harness** for constraint-aware adversarial attacks on ML-based network intrusion detection.
+Anonymous package of **data, scripts, and materials** for the constraint-aware adversarial NIDS study (double-blind review).
 
-It compares gradient (FGSM/PGD), decision-based (HopSkipJump), and GAN attacks in **unconstrained** vs **constrained** regimes, and reports attack success rate, perturbation size, and **valid-sample rate**.
+**Paper sources and PDFs are intentionally excluded** from this folder.
 
-Manuscripts, proposals, and arXiv sources live in a separate private repository. This repo is **code, config, and tests only**.
+## Contents
 
-**Author:** Sathyaraj Kolandasamy  
-**Affiliation:** Nova Southeastern University
+| Path | What it is |
+| --- | --- |
+| `src/` | Constraint mask, models, ART attack wrappers, metrics, defense |
+| `experiments/run_experiment.py` | One-command experiment CLI |
+| `scripts/` | Dataset download helper, freeze indices, run metadata |
+| `tests/` | Unit tests (no raw dataset required) |
+| `config.yaml` | Seeds, models, attack/defense settings |
+| `requirements.txt` | Python dependencies |
+| `data/README.md` | How to obtain CICIDS-2017 / UNSW-NB15 (raw CSVs not included) |
+| `results/splits/` | Fixed train/val/test index files (`*_seed42.npz`) |
+| `results/real/full/` | Full-corpus freeze JSON used for Section 6 tables |
+| `results/real/*.json` | Earlier 80k-extract freeze (historical; not Section 6) |
+| `results/DATA_FREEZE.md` | Freeze protocol notes |
+| `results/run_meta.json` | Environment / run metadata snapshot (paths redacted) |
+| `RESULTS.md` | Human-readable result summary |
+| `LICENSE` | MIT (anonymous copyright for review) |
+| `CITATION.cff` | Anonymous citation stub for review |
 
-## Setup
+## Not included
 
-```powershell
+- Raw CICIDS-2017 / UNSW-NB15 CSVs or PCAPs (`data/raw/` stays local)
+- Paper Markdown / LaTeX / PDF / BibTeX
+- Synthetic smoke JSON dumps
+- Author names, emails, affiliations, or personal repository URLs
+
+## Quick start
+
+```bash
+cd metrocon-artifacts
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -m pytest tests/ -v
-python experiments/run_experiment.py --synthetic --model mlp --attack all
+# After placing raw CSVs per data/README.md:
+python experiments/run_experiment.py --model mlp --attack all --output-dir results/real/full
 ```
 
-Raw CICIDS-2017 / UNSW-NB15 files are **not** included. See [`data/README.md`](data/README.md), then:
+## Artifact boundary
 
-```powershell
-python experiments/run_experiment.py --model mlp --attack all
-```
-
-## Layout
-
-| Path | Contents |
-| --- | --- |
-| `src/` | Constraint mask, models, attacks, metrics |
-| `experiments/` | CLI for the experiment matrix |
-| `tests/` | Unit tests (no dataset required) |
-| `config.yaml` | Seeds, models, attack settings |
-| `data/README.md` | How to obtain public datasets |
-
-## License
-
-MIT. Do not relicense third-party datasets.
+Released materials are **code, config, constraint specification, fixed split indices, tests, and freeze result JSON**. Raw traffic is not redistributed.
